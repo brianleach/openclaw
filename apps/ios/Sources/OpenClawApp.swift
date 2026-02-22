@@ -124,6 +124,13 @@ final class OpenClawAppDelegate: NSObject, UIApplicationDelegate, @preconcurrenc
         notificationCenter.delegate = self
         ExecApprovalNotificationBridge.registerCategory(center: notificationCenter)
         application.registerForRemoteNotifications()
+        Task {
+            let center = UNUserNotificationCenter.current()
+            let status = await center.notificationSettings()
+            if status.authorizationStatus == .notDetermined {
+                _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+            }
+        }
         return true
     }
 
