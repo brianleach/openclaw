@@ -654,6 +654,51 @@ export const nodeHandlers: GatewayRequestHandlers = {
         }
         if (!nodeSession) {
           const totalDurationMs = Math.max(0, Date.now() - wakeFlowStartedAtMs);
+
+          // APNs alert fallback for system.notify: deliver the actual notification
+          // content as a push alert instead of returning an error.
+          if (command === "system.notify" && p.params && typeof p.params === "object") {
+            const notifyParams = p.params as { title?: string; body?: string };
+            const title = typeof notifyParams.title === "string" ? notifyParams.title.trim() : "";
+            const body = typeof notifyParams.body === "string" ? notifyParams.body.trim() : "";
+
+            if (title || body) {
+              const registration = await loadApnsRegistration(nodeId);
+              const auth = await resolveApnsAuthConfigFromEnv(process.env);
+
+              if (registration && auth.ok) {
+                try {
+                  const alertResult = await sendApnsAlert({
+                    auth: auth.value,
+                    registration,
+                    nodeId,
+                    title: title || "OpenClaw",
+                    body: body || title,
+                  });
+
+                  if (alertResult.ok) {
+                    context.logGateway.info(
+                      `system.notify apns-alert-fallback node=${nodeId} ` +
+                        `status=${alertResult.status} ok=true totalMs=${totalDurationMs}`,
+                    );
+                    respond(true, {
+                      ok: true,
+                      nodeId,
+                      command,
+                      delivery: "apns-alert",
+                      payload: { delivered: true, method: "apns-alert" },
+                    });
+                    return;
+                  }
+                } catch (err) {
+                  context.logGateway.warn(
+                    `system.notify apns-alert-fallback failed node=${nodeId}: ${String(err)}`,
+                  );
+                }
+              }
+            }
+          }
+
           const nudge = await maybeSendNodeWakeNudge(nodeId);
           context.logGateway.info(
             `node wake nudge node=${nodeId} req=${wakeReqId} sent=${nudge.sent} ` +

@@ -230,3 +230,163 @@ describe("node.invoke APNs wake path", () => {
     expect(nodeRegistry.invoke).not.toHaveBeenCalled();
   });
 });
+
+describe("node.invoke system.notify APNs alert fallback", () => {
+  beforeEach(() => {
+    mocks.loadConfig.mockClear();
+    mocks.loadConfig.mockReturnValue({});
+    mocks.resolveNodeCommandAllowlist.mockClear();
+    mocks.resolveNodeCommandAllowlist.mockReturnValue([]);
+    mocks.isNodeCommandAllowed.mockClear();
+    mocks.isNodeCommandAllowed.mockReturnValue({ ok: true });
+    mocks.sanitizeNodeInvokeParamsForForwarding.mockClear();
+    mocks.sanitizeNodeInvokeParamsForForwarding.mockImplementation(
+      ({ rawParams }: { rawParams: unknown }) => ({ ok: true, params: rawParams }),
+    );
+    mocks.loadApnsRegistration.mockClear();
+    mocks.resolveApnsAuthConfigFromEnv.mockClear();
+    mocks.sendApnsBackgroundWake.mockClear();
+    mocks.sendApnsAlert.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("delivers system.notify as APNs alert when node is offline", async () => {
+    vi.useFakeTimers();
+    mockSuccessfulWakeConfig("ios-notify-offline");
+    mocks.sendApnsAlert.mockResolvedValue({ ok: true, status: 200 });
+
+    const nodeRegistry = {
+      get: vi.fn(() => undefined),
+      invoke: vi.fn().mockResolvedValue({ ok: true }),
+    };
+
+    const invokePromise = invokeNode({
+      nodeRegistry,
+      requestParams: {
+        nodeId: "ios-notify-offline",
+        command: "system.notify",
+        params: { title: "Briefing", body: "Your daily summary is ready." },
+        idempotencyKey: "idem-notify-fallback",
+      },
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+    const respond = await invokePromise;
+
+    expect(mocks.sendApnsAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodeId: "ios-notify-offline",
+        title: "Briefing",
+        body: "Your daily summary is ready.",
+      }),
+    );
+    const call = respond.mock.calls[0] as RespondCall | undefined;
+    expect(call?.[0]).toBe(true);
+    expect(call?.[1]).toMatchObject({
+      ok: true,
+      nodeId: "ios-notify-offline",
+      command: "system.notify",
+      delivery: "apns-alert",
+      payload: { delivered: true, method: "apns-alert" },
+    });
+    // Should NOT invoke on the node or send the generic nudge
+    expect(nodeRegistry.invoke).not.toHaveBeenCalled();
+  });
+
+  it("falls through to error when APNs alert fails for system.notify", async () => {
+    vi.useFakeTimers();
+    mockSuccessfulWakeConfig("ios-notify-fail");
+    mocks.sendApnsAlert.mockResolvedValue({ ok: false, status: 400, reason: "BadDeviceToken" });
+
+    const nodeRegistry = {
+      get: vi.fn(() => undefined),
+      invoke: vi.fn().mockResolvedValue({ ok: true }),
+    };
+
+    const invokePromise = invokeNode({
+      nodeRegistry,
+      requestParams: {
+        nodeId: "ios-notify-fail",
+        command: "system.notify",
+        params: { title: "Test", body: "Should fail" },
+        idempotencyKey: "idem-notify-fail",
+      },
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+    const respond = await invokePromise;
+
+    expect(mocks.sendApnsAlert).toHaveBeenCalled();
+    const call = respond.mock.calls[0] as RespondCall | undefined;
+    expect(call?.[0]).toBe(false);
+    expect(call?.[2]?.code).toBe(ErrorCodes.UNAVAILABLE);
+    expect(call?.[2]?.message).toBe("node not connected");
+  });
+
+  it("does not use alert fallback for non-system.notify commands", async () => {
+    vi.useFakeTimers();
+    mockSuccessfulWakeConfig("ios-no-fallback");
+
+    const nodeRegistry = {
+      get: vi.fn(() => undefined),
+      invoke: vi.fn().mockResolvedValue({ ok: true }),
+    };
+
+    const invokePromise = invokeNode({
+      nodeRegistry,
+      requestParams: {
+        nodeId: "ios-no-fallback",
+        command: "camera.capture",
+        params: { title: "Ignored", body: "Not a notify" },
+        idempotencyKey: "idem-no-fallback",
+      },
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+    const respond = await invokePromise;
+
+    // sendApnsAlert is called by the nudge path (maybeSendNodeWakeNudge),
+    // but NOT with the custom title/body from params
+    const alertCalls = mocks.sendApnsAlert.mock.calls as Array<[{ title: string; body: string }]>;
+    for (const [args] of alertCalls) {
+      expect(args.title).not.toBe("Ignored");
+      expect(args.body).not.toBe("Not a notify");
+    }
+    const call = respond.mock.calls[0] as RespondCall | undefined;
+    expect(call?.[0]).toBe(false);
+    expect(call?.[2]?.code).toBe(ErrorCodes.UNAVAILABLE);
+  });
+
+  it("uses title as body fallback when body is empty", async () => {
+    vi.useFakeTimers();
+    mockSuccessfulWakeConfig("ios-notify-title-only");
+    mocks.sendApnsAlert.mockResolvedValue({ ok: true, status: 200 });
+
+    const nodeRegistry = {
+      get: vi.fn(() => undefined),
+      invoke: vi.fn().mockResolvedValue({ ok: true }),
+    };
+
+    const invokePromise = invokeNode({
+      nodeRegistry,
+      requestParams: {
+        nodeId: "ios-notify-title-only",
+        command: "system.notify",
+        params: { title: "Quick update" },
+        idempotencyKey: "idem-notify-title-only",
+      },
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+    const respond = await invokePromise;
+
+    expect(mocks.sendApnsAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Quick update",
+        body: "Quick update",
+      }),
+    );
+    const call = respond.mock.calls[0] as RespondCall | undefined;
+    expect(call?.[0]).toBe(true);
+    expect(call?.[1]).toMatchObject({ delivery: "apns-alert" });
+  });
+});
