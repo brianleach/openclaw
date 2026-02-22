@@ -501,11 +501,19 @@ final class NodeAppModel {
     private static let defaultSeamColor = Color(red: 79 / 255.0, green: 122 / 255.0, blue: 154 / 255.0)
     private static let apnsDeviceTokenUserDefaultsKey = "push.apns.deviceTokenHex"
     private static var apnsEnvironment: String {
-#if DEBUG
-        "sandbox"
-#else
-        "production"
-#endif
+        // Determine the actual APNs environment from the embedded provisioning
+        // profile rather than the build configuration. Xcode development
+        // provisioning profiles always produce sandbox device tokens, even for
+        // Release builds, so #if DEBUG is unreliable.
+        if let path = Bundle.main.path(forResource: "embedded", ofType: "mobileprovision"),
+           let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+           let contents = String(data: data, encoding: .ascii),
+           contents.contains("<key>aps-environment</key>") {
+            if contents.contains("<string>production</string>") {
+                return "production"
+            }
+        }
+        return "sandbox"
     }
 
     private static func color(fromHex raw: String?) -> Color? {
