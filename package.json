@@ -1,6 +1,6 @@
 {
   "name": "openclaw",
-  "version": "2026.2.21",
+  "version": "2026.2.22",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
   "homepage": "https://github.com/openclaw/openclaw#readme",
@@ -170,6 +170,7 @@
     "file-type": "^21.3.0",
     "grammy": "^1.40.0",
     "https-proxy-agent": "^7.0.6",
+    "ipaddr.js": "^2.3.0",
     "jiti": "^2.6.1",
     "json5": "^2.2.3",
     "jszip": "^3.10.1",
