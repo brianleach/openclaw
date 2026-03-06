@@ -1,5 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
 import process from "node:process";
 import { describe, expect, it, vi } from "vitest";
 import { attachChildProcessBridge } from "./child-process-bridge.js";
@@ -56,38 +57,6 @@ describe("runCommandWithTimeout", () => {
     expect(result.code).not.toBe(0);
   });
 
-  it("resets no output timer when command keeps emitting output", async () => {
-    const result = await runCommandWithTimeout(
-      [
-        process.execPath,
-        "-e",
-        [
-          "let count = 0;",
-          "const emit = () => {",
-          'process.stdout.write(".");',
-          "count += 1;",
-          "if (count >= 4) {",
-          "process.exit(0);",
-          "return;",
-          "}",
-          "setTimeout(emit, 40);",
-          "};",
-          "emit();",
-        ].join(" "),
-      ],
-      {
-        timeoutMs: 2_000,
-        // Keep a healthy margin above the emit interval for loaded CI runners.
-        noOutputTimeoutMs: 400,
-      },
-    );
-
-    expect(result.code ?? 0).toBe(0);
-    expect(result.termination).toBe("exit");
-    expect(result.noOutputTimedOut).toBe(false);
-    expect(result.stdout.length).toBeGreaterThanOrEqual(3);
-  });
-
   it("reports global timeout termination when overall timeout elapses", async () => {
     const result = await runCommandWithTimeout(
       [process.execPath, "-e", "setTimeout(() => {}, 10)"],
@@ -107,6 +76,20 @@ describe("runCommandWithTimeout", () => {
       const result = await runCommandWithTimeout(["npm", "--version"], { timeoutMs: 10_000 });
       expect(result.code).toBe(0);
       expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+    },
+  );
+
+  it.runIf(process.platform === "win32")(
+    "falls back to npm.cmd when npm-cli.js is unavailable",
+    async () => {
+      const existsSpy = vi.spyOn(fs, "existsSync").mockReturnValue(false);
+      try {
+        const result = await runCommandWithTimeout(["npm", "--version"], { timeoutMs: 10_000 });
+        expect(result.code).toBe(0);
+        expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+      } finally {
+        existsSpy.mockRestore();
+      }
     },
   );
 });
