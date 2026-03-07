@@ -1,6 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Stub localStorage before any module resolution (i18n accesses it at load time).
+// Node 22+ has a built-in localStorage that throws without --localstorage-file.
+vi.hoisted(() => {
+  (globalThis as Record<string, unknown>).localStorage = {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+    clear: () => {},
+    length: 0,
+    key: () => null,
+  };
+});
+
 import { GATEWAY_EVENT_UPDATE_AVAILABLE } from "../../../src/gateway/events.js";
 import { connectGateway, resolveControlUiClientVersion } from "./app-gateway.ts";
+
+vi.mock("./controllers/chat.ts", () => ({
+  loadChatHistory: vi.fn().mockResolvedValue(undefined),
+  handleChatEvent: vi.fn().mockReturnValue(null),
+}));
 
 type GatewayClientMock = {
   start: ReturnType<typeof vi.fn>;
@@ -106,6 +125,9 @@ function createHost() {
     serverVersion: null,
     sessionKey: "main",
     chatRunId: null,
+    chatMessages: [],
+    chatLoading: false,
+    chatGapIndex: null,
     refreshSessionsAfterChat: new Set<string>(),
     execApprovalQueue: [],
     execApprovalError: null,
@@ -129,13 +151,33 @@ describe("connectGateway", () => {
     const secondClient = gatewayClientInstances[1];
     expect(secondClient).toBeDefined();
 
+    // Stale client gap should be ignored (no error, no side effects).
     firstClient.emitGap(10, 13);
     expect(host.lastError).toBeNull();
 
+    // Active client gap should not set lastError (auto-refresh handles it).
     secondClient.emitGap(20, 24);
-    expect(host.lastError).toBe(
-      "event gap detected (expected seq 20, got 24); refresh recommended",
-    );
+    expect(host.lastError).toBeNull();
+  });
+
+  it("auto-refreshes chat history on gap detection", async () => {
+    const { loadChatHistory } = await import("./controllers/chat.ts");
+    const host = createHost();
+    (host as unknown as { chatMessages: unknown[] }).chatMessages = [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: "hi" },
+    ];
+
+    connectGateway(host);
+    const client = gatewayClientInstances[0];
+    expect(client).toBeDefined();
+
+    client.emitGap(5, 8);
+
+    // loadChatHistory should have been called (auto-refresh)
+    expect(loadChatHistory).toHaveBeenCalled();
+    // No error message set — gap is handled silently via auto-refresh
+    expect(host.lastError).toBeNull();
   });
 
   it("ignores stale client onEvent callbacks after reconnect", () => {

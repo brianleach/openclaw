@@ -65,6 +65,9 @@ export type ChatProps = {
   // Image attachments
   attachments?: ChatAttachment[];
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void;
+  // Gap marker (auto-refresh on event gap)
+  gapIndex?: number | null;
+  onDismissGap?: () => void;
   // Scroll control
   showNewMessages?: boolean;
   onScrollToBottom?: () => void;
@@ -282,6 +285,37 @@ export function renderChat(props: ChatProps) {
                 <span class="chat-divider__line"></span>
                 <span class="chat-divider__label">${item.label}</span>
                 <span class="chat-divider__line"></span>
+              </div>
+            `;
+          }
+
+          if (item.kind === "gap") {
+            const label =
+              item.newCount > 0
+                ? `${item.newCount} new message${item.newCount !== 1 ? "s" : ""} since you were away`
+                : "New activity since you were away";
+            return html`
+              <div
+                class="chat-divider chat-divider--gap"
+                id="chat-gap-marker"
+                role="separator"
+                aria-label=${label}
+              >
+                <span class="chat-divider__line chat-divider__line--gap"></span>
+                <span class="chat-divider__label chat-divider__label--gap">
+                  ${label}
+                  ${
+                    props.onDismissGap
+                      ? html`<button
+                        class="chat-divider__dismiss"
+                        type="button"
+                        aria-label="Dismiss"
+                        @click=${props.onDismissGap}
+                      >${icons.x}</button>`
+                      : nothing
+                  }
+                </span>
+                <span class="chat-divider__line chat-divider__line--gap"></span>
               </div>
             `;
           }
@@ -538,7 +572,19 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
       },
     });
   }
+  const gapIndex = props.gapIndex ?? null;
   for (let i = historyStart; i < history.length; i++) {
+    // Insert gap divider at the boundary between old and new messages.
+    if (gapIndex !== null && i === gapIndex && i > historyStart) {
+      const newCount = history.length - gapIndex;
+      items.push({
+        kind: "gap",
+        key: "divider:gap",
+        newCount,
+        timestamp: Date.now(),
+      });
+    }
+
     const msg = history[i];
     const normalized = normalizeMessage(msg);
     const raw = msg as Record<string, unknown>;

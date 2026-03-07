@@ -218,6 +218,7 @@ export function renderChatControls(state: AppViewState) {
           const app = state as unknown as OpenClawApp;
           app.chatManualRefreshInFlight = true;
           app.chatNewMessagesBelow = false;
+          app.chatGapIndex = null;
           await app.updateComplete;
           app.resetToolStream();
           try {

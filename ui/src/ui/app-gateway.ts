@@ -197,6 +197,7 @@ export function connectGateway(host: GatewayHost) {
       // Reset orphaned chat run state from before disconnect.
       // Any in-flight run's final event was lost during the disconnect window.
       host.chatRunId = null;
+      (host as unknown as OpenClawApp).chatGapIndex = null;
       (host as unknown as { chatStream: string | null }).chatStream = null;
       (host as unknown as { chatStreamStartedAt: number | null }).chatStreamStartedAt = null;
       resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
@@ -237,8 +238,21 @@ export function connectGateway(host: GatewayHost) {
       if (host.client !== client) {
         return;
       }
-      host.lastError = `event gap detected (expected seq ${expected}, got ${received}); refresh recommended`;
-      host.lastErrorCode = null;
+      const app = host as unknown as OpenClawApp;
+      const preGapCount = app.chatMessages.length;
+      console.info(
+        `[gateway] event gap detected (expected seq ${expected}, got ${received}); auto-refreshing`,
+      );
+      // Auto-refresh chat history and mark the gap boundary.
+      void loadChatHistory(app).then(() => {
+        if (host.client !== client) {
+          return;
+        }
+        // Only set the gap marker if new messages appeared after the gap.
+        if (app.chatMessages.length > preGapCount) {
+          app.chatGapIndex = preGapCount;
+        }
+      });
     },
   });
   host.client = client;

@@ -1009,6 +1009,7 @@ export function renderApp(state: AppViewState) {
                   state.chatStreamStartedAt = null;
                   state.chatRunId = null;
                   state.chatQueue = [];
+                  (state as unknown as import("./app.js").OpenClawApp).chatGapIndex = null;
                   state.resetToolStream();
                   state.resetChatScroll();
                   state.applySettings({
@@ -1039,8 +1040,13 @@ export function renderApp(state: AppViewState) {
                 error: state.lastError,
                 sessions: state.sessionsResult,
                 focusMode: chatFocus,
+                gapIndex: state.chatGapIndex,
+                onDismissGap: () => {
+                  (state as unknown as import("./app.js").OpenClawApp).chatGapIndex = null;
+                },
                 onRefresh: () => {
                   state.resetToolStream();
+                  (state as unknown as import("./app.js").OpenClawApp).chatGapIndex = null;
                   return Promise.all([loadChatHistory(state), refreshChatAvatar(state)]);
                 },
                 onToggleFocusMode: () => {

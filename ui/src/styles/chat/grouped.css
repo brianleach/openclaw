@@ -81,6 +81,47 @@
   background: rgba(255, 255, 255, 0.02);
 }
 
+/* Gap divider — marks where new activity began while user was away */
+.chat-divider--gap {
+  color: var(--accent, #58a6ff);
+}
+
+.chat-divider__line--gap {
+  background: var(--accent, #58a6ff);
+  opacity: 0.5;
+}
+
+.chat-divider__label--gap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: var(--accent, #58a6ff);
+  background: color-mix(in srgb, var(--accent, #58a6ff) 8%, transparent);
+}
+
+.chat-divider__dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.chat-divider__dismiss:hover {
+  opacity: 1;
+}
+
+.chat-divider__dismiss svg {
+  width: 10px;
+  height: 10px;
+}
+
 /* Avatar Styles */
 .chat-avatar {
   width: 40px;

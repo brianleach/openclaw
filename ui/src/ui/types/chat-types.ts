@@ -6,6 +6,7 @@
 export type ChatItem =
   | { kind: "message"; key: string; message: unknown }
   | { kind: "divider"; key: string; label: string; timestamp: number }
+  | { kind: "gap"; key: string; newCount: number; timestamp: number }
   | { kind: "stream"; key: string; text: string; startedAt: number }
   | { kind: "reading-indicator"; key: string };
 

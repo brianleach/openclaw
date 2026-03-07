@@ -154,6 +154,7 @@ export class OpenClawApp extends LitElement {
   @state() chatQueue: ChatQueueItem[] = [];
   @state() chatAttachments: ChatAttachment[] = [];
   @state() chatManualRefreshInFlight = false;
+  @state() chatGapIndex: number | null = null;
   // Sidebar state for tool output viewing
   @state() sidebarOpen = false;
   @state() sidebarContent: string | null = null;
