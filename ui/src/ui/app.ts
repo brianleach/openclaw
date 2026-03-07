@@ -154,6 +154,10 @@ export class OpenClawApp extends LitElement {
   @state() chatQueue: ChatQueueItem[] = [];
   @state() chatAttachments: ChatAttachment[] = [];
   @state() chatManualRefreshInFlight = false;
+  // Input history for up/down arrow navigation (not reactive — no re-render needed)
+  private chatInputHistory: string[] = [];
+  private chatInputHistoryCursor = -1;
+  private chatInputHistoryDraft = "";
   // Sidebar state for tool output viewing
   @state() sidebarOpen = false;
   @state() sidebarContent: string | null = null;
@@ -496,11 +500,53 @@ export class OpenClawApp extends LitElement {
     messageOverride?: string,
     opts?: Parameters<typeof handleSendChatInternal>[2],
   ) {
+    const text = (messageOverride ?? this.chatMessage).trim();
+    if (text) {
+      // Avoid consecutive duplicates in history
+      if (this.chatInputHistory[this.chatInputHistory.length - 1] !== text) {
+        this.chatInputHistory.push(text);
+        // Cap history at 100 entries
+        if (this.chatInputHistory.length > 100) {
+          this.chatInputHistory.shift();
+        }
+      }
+      this.chatInputHistoryCursor = -1;
+      this.chatInputHistoryDraft = "";
+    }
     await handleSendChatInternal(
       this as unknown as Parameters<typeof handleSendChatInternal>[0],
       messageOverride,
       opts,
     );
+  }
+
+  chatHistoryUp() {
+    const history = this.chatInputHistory;
+    if (history.length === 0) {
+      return;
+    }
+    if (this.chatInputHistoryCursor === -1) {
+      // Save current draft before navigating
+      this.chatInputHistoryDraft = this.chatMessage;
+      this.chatInputHistoryCursor = history.length - 1;
+    } else if (this.chatInputHistoryCursor > 0) {
+      this.chatInputHistoryCursor--;
+    }
+    this.chatMessage = history[this.chatInputHistoryCursor] ?? "";
+  }
+
+  chatHistoryDown() {
+    if (this.chatInputHistoryCursor === -1) {
+      return;
+    }
+    if (this.chatInputHistoryCursor < this.chatInputHistory.length - 1) {
+      this.chatInputHistoryCursor++;
+      this.chatMessage = this.chatInputHistory[this.chatInputHistoryCursor] ?? "";
+    } else {
+      // Past the end — restore original draft
+      this.chatInputHistoryCursor = -1;
+      this.chatMessage = this.chatInputHistoryDraft;
+    }
   }
 
   async handleWhatsAppStart(force: boolean) {

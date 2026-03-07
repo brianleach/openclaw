@@ -1054,6 +1054,8 @@ export function renderApp(state: AppViewState) {
                 },
                 onChatScroll: (event) => state.handleChatScroll(event),
                 onDraftChange: (next) => (state.chatMessage = next),
+                onHistoryUp: () => state.chatHistoryUp(),
+                onHistoryDown: () => state.chatHistoryDown(),
                 attachments: state.chatAttachments,
                 onAttachmentsChange: (next) => (state.chatAttachments = next),
                 onSend: () => state.handleSendChat(),

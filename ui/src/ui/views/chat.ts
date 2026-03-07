@@ -73,6 +73,8 @@ export type ChatProps = {
   onToggleFocusMode: () => void;
   onDraftChange: (next: string) => void;
   onSend: () => void;
+  onHistoryUp?: () => void;
+  onHistoryDown?: () => void;
   onAbort?: () => void;
   onQueueRemove: (id: string) => void;
   onNewSession: () => void;
@@ -253,7 +255,7 @@ export function renderChat(props: ChatProps) {
   const composePlaceholder = props.connected
     ? hasAttachments
       ? "Add a message or paste more images..."
-      : "Message (↩ to send, Shift+↩ for line breaks, paste images)"
+      : "Message (↩ send, Shift+↩ newline, ↑↓ history)"
     : "Connect to the gateway to start chatting…";
 
   const splitRatio = props.splitRatio ?? 0.6;
@@ -431,21 +433,35 @@ export function renderChat(props: ChatProps) {
               dir=${detectTextDirection(props.draft)}
               ?disabled=${!props.connected}
               @keydown=${(e: KeyboardEvent) => {
-                if (e.key !== "Enter") {
-                  return;
-                }
                 if (e.isComposing || e.keyCode === 229) {
                   return;
                 }
-                if (e.shiftKey) {
-                  return;
-                } // Allow Shift+Enter for line breaks
-                if (!props.connected) {
+                if (e.key === "Enter") {
+                  if (e.shiftKey) {
+                    return;
+                  } // Allow Shift+Enter for line breaks
+                  if (!props.connected) {
+                    return;
+                  }
+                  e.preventDefault();
+                  if (canCompose) {
+                    props.onSend();
+                  }
                   return;
                 }
-                e.preventDefault();
-                if (canCompose) {
-                  props.onSend();
+                // Up/Down arrow history navigation (only when input is empty or single-line)
+                const textarea = e.target as HTMLTextAreaElement;
+                const value = textarea.value;
+                const isMultiline = value.includes("\n");
+                if (e.key === "ArrowUp" && !isMultiline && props.onHistoryUp) {
+                  e.preventDefault();
+                  props.onHistoryUp();
+                  return;
+                }
+                if (e.key === "ArrowDown" && !isMultiline && props.onHistoryDown) {
+                  e.preventDefault();
+                  props.onHistoryDown();
+                  return;
                 }
               }}
               @input=${(e: Event) => {
